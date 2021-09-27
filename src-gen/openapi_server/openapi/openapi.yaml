@@ -1,0 +1,1536 @@
+openapi: 3.0.1
+info:
+  description: Provides Open API endpoints to caluclate policy payouts based on crop
+    insurance product configurations, policy premiums payments, activations and percipitation
+    values obtaines from satellite data
+  title: Bima Bolt - API Server
+  version: "1.0"
+servers:
+- description: OpenAPI server base path
+  url: http://localhost:8181/api/{versionId}
+  variables:
+    versionId:
+      default: v1
+      description: API version
+      enum:
+      - v1
+tags:
+- description: Manage policy activations via USSD
+  name: Activations
+- description: Manage premium payments via USSD
+  name: Payments
+- description: Read access to policy information
+  name: Policies
+- description: Get Arc2 rainfall data, Arc2 cache monitoring
+  name: Arc2
+- description: Manage S3 buckets, mongoDB access
+  name: Admin
+paths:
+  /activations:
+    get:
+      description: List all policy activation events so far
+      operationId: activations_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Activation'
+                type: array
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Activations
+      x-openapi-router-controller: openapi_server.controllers.activations_controller
+    post:
+      description: Create a policy activation event. Do not include an id attribute
+        when posting activation event data.
+      operationId: activations_post
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Activation'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceId'
+          description: Created - new activation event created. The response provides
+            the id of the new event.
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Activations
+      x-openapi-router-controller: openapi_server.controllers.activations_controller
+  /activations/planting_window:
+    get:
+      description: Provide the planting window for the current season given crop and
+        location parameters
+      operationId: activations_planting_window_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The reference date for the request
+        example: "20210511"
+        explode: true
+        in: query
+        name: reference_date
+        required: false
+        schema:
+          pattern: ^20[0-9]{6}$
+          type: string
+        style: form
+      - description: Crop (also called value chain)
+        example: Maize
+        explode: true
+        in: query
+        name: crop
+        required: false
+        schema:
+          enum:
+          - Maize
+          - Sorghum
+          - Greengrams
+          - Potato
+          - SoyBeans
+          - Wheat
+          type: string
+        style: form
+      - description: Latitude of the location of the mobile device at the time of
+          the call. Any number between -40 (40 degrees South) to 40 (40 degrees North)
+        explode: true
+        in: query
+        name: latitude
+        required: false
+        schema:
+          example: 0.125583
+          maximum: 40.0
+          minimum: -40.0
+          type: number
+        style: form
+      - description: Longitude of the location of the mobile device at the time of
+          the call. Any number between -20 (20 degrees West) to 55 (55 degrees East)
+        explode: true
+        in: query
+        name: longitude
+        required: false
+        schema:
+          example: 35.1592
+          maximum: 55.0
+          minimum: -20.0
+          type: number
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantingWindow'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Activations
+      x-openapi-router-controller: openapi_server.controllers.activations_controller
+  /activations/{event_id}:
+    get:
+      description: Get a single policy activation event
+      operationId: activations_event_id_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: A resource identifier
+        example: 4ad6f91d-6378-4f52-b817-00cbc85ca39x
+        explode: false
+        in: path
+        name: event_id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activation'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundResponse'
+          description: ERROR - No data set found for the ID provided
+      tags:
+      - Activations
+      x-openapi-router-controller: openapi_server.controllers.activations_controller
+  /arc2/cache:
+    get:
+      description: Get Arc2 cache status
+      operationId: arc2_cache_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: Start date for rainfall data in YYYYMMDD format
+        example: "20210511"
+        explode: true
+        in: query
+        name: date
+        required: true
+        schema:
+          pattern: ^20[0-9]{6}$
+          type: string
+        style: form
+      - description: Number of days for rainfall data
+        example: 14
+        explode: true
+        in: query
+        name: days
+        required: true
+        schema:
+          maximum: 200
+          minimum: 1
+          type: number
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arc2Cache'
+          description: OK
+        "400":
+          description: Bad request
+      tags:
+      - Arc2
+      x-openapi-router-controller: openapi_server.controllers.arc2_controller
+  /arc2/rainfall:
+    get:
+      description: Get historic rainfall data
+      operationId: arc2_rainfall_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: Rainfall pixel location
+        example: Pixel400568
+        explode: true
+        in: query
+        name: location
+        required: true
+        schema:
+          pattern: ^Pixel[0-9]{6}$
+          type: string
+        style: form
+      - description: Start date for rainfall data in YYYYMMDD format
+        example: "20210511"
+        explode: true
+        in: query
+        name: date
+        required: true
+        schema:
+          pattern: ^20[0-9]{6}$
+          type: string
+        style: form
+      - description: Number of days for rainfall data
+        example: 14
+        explode: true
+        in: query
+        name: days
+        required: true
+        schema:
+          maximum: 200
+          minimum: 1
+          type: number
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Arc2Rainfall'
+          description: OK
+        "400":
+          description: Bad request
+      tags:
+      - Arc2
+      x-openapi-router-controller: openapi_server.controllers.arc2_controller
+  /config:
+    get:
+      description: Get config for external components
+      operationId: config_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+          description: OK
+      tags:
+      - Admin
+      x-openapi-router-controller: openapi_server.controllers.admin_controller
+    post:
+      description: Set config for external components
+      operationId: config_post
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Config'
+      responses:
+        "200":
+          description: OK - config successfully updated.
+      tags:
+      - Admin
+      x-openapi-router-controller: openapi_server.controllers.admin_controller
+  /payments:
+    get:
+      description: List all policy payment events so far
+      operationId: payments_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Payment'
+                type: array
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Payments
+      x-openapi-router-controller: openapi_server.controllers.payments_controller
+    post:
+      description: Create a payment event. Do not include an id attribute when posting
+        payment event data.
+      operationId: payments_post
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Payment'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceId'
+          description: Created - new payment event created. The response provides
+            the id of the new event.
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Payments
+      x-openapi-router-controller: openapi_server.controllers.payments_controller
+  /payments/{event_id}:
+    get:
+      description: Get a single policy payment event
+      operationId: payments_event_id_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: A resource identifier
+        example: 4ad6f91d-6378-4f52-b817-00cbc85ca39x
+        explode: false
+        in: path
+        name: event_id
+        required: true
+        schema:
+          format: uuid
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundResponse'
+          description: ERROR - No data set found for the ID provided
+      tags:
+      - Payments
+      x-openapi-router-controller: openapi_server.controllers.payments_controller
+  /policies:
+    get:
+      description: Policy information
+      operationId: policies_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: Phone number
+        explode: true
+        in: query
+        name: phone_no
+        required: false
+        schema:
+          example: "254792125732"
+          pattern: ^[0-9]{9,12}$
+          type: string
+        style: form
+      - description: Policy status
+        example: Active
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          enum:
+          - Active
+          - Expired
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Policy'
+                type: array
+          description: OK
+        "400":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/BadRequestResponse'
+                type: array
+          description: Bad request
+      tags:
+      - Policies
+      x-openapi-router-controller: openapi_server.controllers.policies_controller
+  /policies/{order_no}:
+    get:
+      description: Provide policy detail information
+      operationId: policies_order_no_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The order number to provide policy information for
+        explode: false
+        in: path
+        name: order_no
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyInfo'
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundResponse'
+          description: ERROR - No policy found for the order number provided
+      tags:
+      - Policies
+      x-openapi-router-controller: openapi_server.controllers.policies_controller
+  /policies/{order_no}/claims:
+    get:
+      description: Provide claims information
+      operationId: policies_order_no_claims_get
+      parameters:
+      - description: The tenant name
+        example: acre
+        explode: true
+        in: query
+        name: tenant
+        required: true
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The environment name
+        example: test
+        explode: true
+        in: query
+        name: env
+        required: false
+        schema:
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: form
+      - description: The order number to provide policy information for
+        explode: false
+        in: path
+        name: order_no
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Claim'
+                type: array
+          description: OK
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundResponse'
+          description: ERROR - No policy found for the order number provided
+      tags:
+      - Policies
+      x-openapi-router-controller: openapi_server.controllers.policies_controller
+components:
+  parameters:
+    TargetDateParam:
+      description: The target date for the loss calculation (rainfall data assumed
+        to be available up to this date)
+      example: "20210623"
+      explode: true
+      in: query
+      name: target_date
+      required: true
+      schema:
+        pattern: ^20[0-9]{6}$
+        type: string
+      style: form
+    TenantParam:
+      description: The tenant name
+      example: acre
+      explode: true
+      in: query
+      name: tenant
+      required: true
+      schema:
+        maxLength: 64
+        minLength: 1
+        type: string
+      style: form
+    EnvParam:
+      description: The environment name
+      example: test
+      explode: true
+      in: query
+      name: env
+      required: false
+      schema:
+        maxLength: 64
+        minLength: 1
+        type: string
+      style: form
+    DateParam:
+      description: The reference date for the request
+      example: "20210511"
+      explode: true
+      in: query
+      name: reference_date
+      required: false
+      schema:
+        pattern: ^20[0-9]{6}$
+        type: string
+      style: form
+    Crop:
+      description: Crop (also called value chain)
+      example: Maize
+      explode: true
+      in: query
+      name: crop
+      required: false
+      schema:
+        enum:
+        - Maize
+        - Sorghum
+        - Greengrams
+        - Potato
+        - SoyBeans
+        - Wheat
+        type: string
+      style: form
+    Latitude:
+      description: Latitude of the location of the mobile device at the time of the
+        call. Any number between -40 (40 degrees South) to 40 (40 degrees North)
+      explode: true
+      in: query
+      name: latitude
+      required: false
+      schema:
+        example: 0.125583
+        maximum: 40.0
+        minimum: -40.0
+        type: number
+      style: form
+    Longitude:
+      description: Longitude of the location of the mobile device at the time of the
+        call. Any number between -20 (20 degrees West) to 55 (55 degrees East)
+      explode: true
+      in: query
+      name: longitude
+      required: false
+      schema:
+        example: 35.1592
+        maximum: 55.0
+        minimum: -20.0
+        type: number
+      style: form
+    PhoneNo:
+      description: Phone number
+      explode: true
+      in: query
+      name: phone_no
+      required: false
+      schema:
+        example: "254792125732"
+        pattern: ^[0-9]{9,12}$
+        type: string
+      style: form
+    PolicyStatusParam:
+      description: Policy status
+      example: Active
+      explode: true
+      in: query
+      name: status
+      required: false
+      schema:
+        enum:
+        - Active
+        - Expired
+        type: string
+      style: form
+    UuidParam:
+      description: A resource identifier
+      example: 4ad6f91d-6378-4f52-b817-00cbc85ca39x
+      explode: false
+      in: path
+      name: event_id
+      required: true
+      schema:
+        format: uuid
+        type: string
+      style: simple
+    PixelLocationParam:
+      description: Rainfall pixel location
+      example: Pixel400568
+      explode: true
+      in: query
+      name: location
+      required: true
+      schema:
+        pattern: ^Pixel[0-9]{6}$
+        type: string
+      style: form
+    StartDateParam:
+      description: Start date for rainfall data in YYYYMMDD format
+      example: "20210511"
+      explode: true
+      in: query
+      name: date
+      required: true
+      schema:
+        pattern: ^20[0-9]{6}$
+        type: string
+      style: form
+    DaysParam:
+      description: Number of days for rainfall data
+      example: 14
+      explode: true
+      in: query
+      name: days
+      required: true
+      schema:
+        maximum: 200
+        minimum: 1
+        type: number
+      style: form
+  schemas:
+    Arc2Cache:
+      example:
+        cache:
+        - 20210511 /data/arc2/africa_arc.20210511.tif.zip
+        - 20210511 /data/arc2/africa_arc.20210511.tif.zip
+        date_begin: "20210511"
+        days: 1
+        date_end: "20210511"
+      properties:
+        date_begin:
+          description: Rainfall cache start date in YYYYMMDD format
+          example: "20210511"
+          pattern: ^20[0-9]{6}$
+          title: date_begin
+          type: string
+        date_end:
+          example: "20210511"
+          pattern: ^20[0-9]{6}$
+          title: date_end
+          type: string
+        days:
+          description: Rainfall cache size in number of days
+          example: 1
+          title: days
+          type: number
+        cache:
+          description: Rainfall cache content
+          items:
+            example: 20210511 /data/arc2/africa_arc.20210511.tif.zip
+            type: string
+          title: cache
+          type: array
+      title: Arc2Cache
+      type: object
+    Arc2Rainfall:
+      example:
+        rainfall:
+        - 20210511 4.0
+        - 20210511 4.0
+        date_begin: "20210511"
+        days: 1
+        date_end: "20210511"
+      properties:
+        date_begin:
+          description: Rainfall data start date in YYYYMMDD format
+          example: "20210511"
+          pattern: ^20[0-9]{6}$
+          title: date_begin
+          type: string
+        date_end:
+          example: "20210511"
+          pattern: ^20[0-9]{6}$
+          title: date_end
+          type: string
+        days:
+          description: Rainfall data for number of days
+          example: 1
+          title: days
+          type: number
+        rainfall:
+          description: Rainfall data
+          items:
+            example: 20210511 4.0
+            type: string
+          title: rainfall
+          type: array
+      title: Arc2Rainfall
+      type: object
+    Config:
+      example:
+        mongo:
+          resource: meteor
+          port: 27017
+          access_secret: access_secret
+          host: host.docker.internal
+          access_id: access_id
+          timeout: 1000
+        s3:
+          resource: meteor
+          port: 27017
+          access_secret: access_secret
+          host: host.docker.internal
+          access_id: access_id
+          timeout: 1000
+        created_at: 2000-01-23T04:56:07.000+00:00
+        arc2:
+          resource: meteor
+          port: 27017
+          access_secret: access_secret
+          host: host.docker.internal
+          access_id: access_id
+          timeout: 1000
+      properties:
+        mongo:
+          $ref: '#/components/schemas/Component'
+        s3:
+          $ref: '#/components/schemas/Component'
+        arc2:
+          $ref: '#/components/schemas/Component'
+        created_at:
+          description: Creation timestamp, omit this property for post requests
+          format: date-time
+          title: created_at
+          type: string
+      required:
+      - arc2
+      - mongo
+      - s3
+      title: Config
+      type: object
+    Component:
+      example:
+        resource: meteor
+        port: 27017
+        access_secret: access_secret
+        host: host.docker.internal
+        access_id: access_id
+        timeout: 1000
+      properties:
+        resource:
+          description: For MongoDB the DB name, for S3 the bucket name, use 'arc2'
+            for Arc2.
+          example: meteor
+          maxLength: 63
+          minLength: 3
+          nullable: false
+          title: resource
+          type: string
+        access_id:
+          description: For S3 the access key, for MongoDB the username, skip for Arc2
+          maxLength: 63
+          minLength: 3
+          nullable: true
+          title: access_id
+          type: string
+        access_secret:
+          description: For S3 the secret key, for MongoDB the password, skip for Arc2
+          maxLength: 63
+          minLength: 3
+          nullable: true
+          title: access_secret
+          type: string
+        host:
+          description: The name or IP address of the host machine (do not use localhost
+            for container ops).
+          example: host.docker.internal
+          maxLength: 32
+          minLength: 6
+          nullable: false
+          title: host
+          type: string
+        port:
+          description: MongoDB default 27017, S3 default 9000, Arc2 default 5000
+          example: 27017
+          format: int32
+          maximum: 99999
+          minimum: 1
+          nullable: false
+          title: port
+          type: number
+        timeout:
+          description: The timeout value [ms] for connection requests.
+          example: 1000
+          format: int32
+          minimum: -1
+          title: timeout
+          type: number
+      title: Component
+      type: object
+    Activation:
+      example:
+        country: KE
+        activation_code: "568947"
+        latitude: 0.125583
+        order_number: A100097-0321
+        call_time: 2000-01-23T04:56:07.000+00:00
+        county: Meru
+        ward: Mount Kenya Forest
+        value_chain: Maize
+        level_3: level_3
+        level_4: level_4
+        mobile_num: "254792125732"
+        amount_premium: 500.0
+        id: ec7fd246-1b51-4f28-bc09-a7f5bae6e143
+        level_1: Meru
+        longitude: 35.1592
+        level_2: Mount Kenya Forest
+      properties:
+        id:
+          description: Unique id of the activation event, omit this attribute for
+            posting new activation events
+          example: ec7fd246-1b51-4f28-bc09-a7f5bae6e143
+          format: uuid
+          title: id
+          type: string
+        mobile_num:
+          description: Phone number
+          example: "254792125732"
+          pattern: ^[0-9]{9,12}$
+          title: mobile_num
+          type: string
+        call_time:
+          description: Timestamp of the call, this is assumed to be the planting date
+          format: date-time
+          title: call_time
+          type: string
+        latitude:
+          description: Latitude at the moment of the call
+          example: 0.125583
+          maximum: 40.0
+          minimum: -40.0
+          title: latitude
+          type: number
+        longitude:
+          description: Longitude at the moment of the call
+          example: 35.1592
+          maximum: 55.0
+          minimum: -20.0
+          title: longitude
+          type: number
+        county:
+          description: County information (when latitude/longitude is missing)
+          example: Meru
+          maxLength: 32
+          minLength: 3
+          title: county
+          type: string
+        ward:
+          description: Ward information (when latitude/longitude is missing)
+          example: Mount Kenya Forest
+          maxLength: 32
+          minLength: 3
+          title: ward
+          type: string
+        country:
+          description: Two letter country code (ISO 3166), eg. KE for Kenya
+          example: KE
+          maxLength: 2
+          minLength: 2
+          title: country
+          type: string
+        level_1:
+          description: Level 1 location, eg county for Kenya
+          example: Meru
+          maxLength: 32
+          minLength: 1
+          title: level_1
+          type: string
+        level_2:
+          description: Level 2 location, eg ward for Kenya
+          example: Mount Kenya Forest
+          maxLength: 32
+          minLength: 1
+          title: level_2
+          type: string
+        level_3:
+          description: Level 3 location, not used for Kenya
+          maxLength: 32
+          minLength: 1
+          title: level_3
+          type: string
+        level_4:
+          description: Level 4 location, not used for Kenya
+          maxLength: 32
+          minLength: 1
+          title: level_4
+          type: string
+        order_number:
+          description: The reference to the policy
+          example: A100097-0321
+          maxLength: 16
+          minLength: 1
+          title: order_number
+          type: string
+        activation_code:
+          description: The activation code for the policy
+          example: "568947"
+          maxLength: 16
+          minLength: 1
+          title: activation_code
+          type: string
+        value_chain:
+          description: Crop (also called value chain)
+          enum:
+          - Maize
+          - Sorghum
+          - Greengrams
+          - Potato
+          - SoyBeans
+          - Wheat
+          example: Maize
+          title: value_chain
+          type: string
+        amount_premium:
+          description: Premium amount for this policy
+          example: 500.0
+          maximum: 1000000.0
+          minimum: 0.0
+          title: amount_premium
+          type: number
+      title: Activation
+    Payment:
+      example:
+        amount_paid: 50.0
+        mobile_num: "254792125732"
+        mpesa_code: PC82GDN7C
+        mpesa_name: Jon Doe
+        order_number: A100097-0321
+        call_time: 2000-01-23T04:56:07.000+00:00
+        id: 8dd6f91d-6378-4f52-b817-00cbc85ca39e
+      properties:
+        id:
+          description: Unique id of the payment event, omit this attribute for posting
+            new payment events
+          example: 8dd6f91d-6378-4f52-b817-00cbc85ca39e
+          format: uuid
+          title: id
+          type: string
+        mobile_num:
+          description: Phone number
+          example: "254792125732"
+          pattern: ^[0-9]{9,12}$
+          title: mobile_num
+          type: string
+        call_time:
+          description: Timestamp of the initiation time of the call
+          format: date-time
+          title: call_time
+          type: string
+        mpesa_code:
+          description: MPesa transaction code
+          example: PC82GDN7C
+          maxLength: 9
+          minLength: 9
+          title: mpesa_code
+          type: string
+        mpesa_name:
+          description: First and last name of person associated with the call
+          example: Jon Doe
+          maxLength: 64
+          minLength: 3
+          title: mpesa_name
+          type: string
+        order_number:
+          description: The reference to the policy
+          example: A100097-0321
+          maxLength: 64
+          minLength: 3
+          title: order_number
+          type: string
+        amount_paid:
+          description: Amount paid for (partial) policy payment
+          example: 50.0
+          maximum: 1000000.0
+          minimum: 0.0
+          title: amount_paid
+          type: number
+      title: Payment
+    PlantingWindow:
+      example:
+        end_date: "20210328"
+        begin_date: "20210314"
+        location: Pixel400568
+        crop: Maize
+      properties:
+        crop:
+          description: Crop (also called value chain)
+          enum:
+          - Maize
+          - Sorghum
+          - Greengrams
+          - Potato
+          - SoyBeans
+          - Wheat
+          example: Maize
+          title: crop
+          type: string
+        location:
+          description: Planting window location
+          example: Pixel400568
+          pattern: ^Pixel[0-9]{6}$
+          title: location
+          type: string
+        begin_date:
+          description: First date of planting for this crop and location
+          example: "20210314"
+          pattern: ^20[0-9]{6}$
+          title: begin_date
+          type: string
+        end_date:
+          description: Last date of planting for this crop and location
+          example: "20210328"
+          pattern: ^20[0-9]{6}$
+          title: end_date
+          type: string
+      title: PlantingWindow
+    Policy:
+      example:
+        order_no: A100097-0321
+        phone_no: "254792125732"
+        funding_end_date: "20210414"
+        status: Active
+      properties:
+        order_no:
+          description: Reference to the order no for this policy
+          example: A100097-0321
+          maxLength: 16
+          minLength: 1
+          title: order_no
+          type: string
+        phone_no:
+          description: Phone number
+          example: "254792125732"
+          pattern: ^[0-9]{9,12}$
+          title: phone_no
+          type: string
+        funding_end_date:
+          description: Last date until which (additional) premium payments are accepted
+            for this policy
+          example: "20210414"
+          pattern: ^20[0-9]{6}$
+          title: funding_end_date
+          type: string
+        status:
+          enum:
+          - Active
+          - Expired
+          example: Active
+          title: status
+          type: string
+      title: Policy
+    PolicyInfo:
+      allOf:
+      - $ref: '#/components/schemas/Policy'
+      - $ref: '#/components/schemas/PolicyInfo_allOf'
+      title: PolicyInfo
+    Claim:
+      example:
+        amount: 53.44
+        name: Vegetation
+        sequence_no: 3
+        status: Confirmed
+      properties:
+        sequence_no:
+          description: Sequence number of claim
+          example: 3
+          maximum: 99
+          minimum: 0
+          title: sequence_no
+          type: number
+        name:
+          description: Claim name
+          enum:
+          - Deductible
+          - GerminationDry
+          - Vegetation
+          - Flowering
+          - ExcessRain
+          example: Vegetation
+          title: name
+          type: string
+        amount:
+          description: Claim amount (negative values for deductibles)
+          example: 53.44
+          maximum: 1000000.0
+          minimum: -100000.0
+          title: amount
+          type: number
+        status:
+          description: Claim status
+          enum:
+          - Pending
+          - Confirmed
+          example: Confirmed
+          title: status
+          type: string
+      title: Claim
+    ResourceId:
+      example:
+        id: 8dd6f91d-6378-4f52-b817-00cbc85ca39e
+      properties:
+        id:
+          description: Unique resource id
+          example: 8dd6f91d-6378-4f52-b817-00cbc85ca39e
+          format: uuid
+          title: id
+          type: string
+      title: ResourceId
+    BadRequestResponse:
+      properties:
+        message:
+          description: Human readable error message
+          example: When posting resources attribute 'id' must be omitted
+          title: message
+          type: string
+        object_type:
+          description: Object type for this operation
+          example: SomeObjectType
+          title: object_type
+          type: string
+      title: BadRequestResponse
+    NotFoundResponse:
+      properties:
+        message:
+          description: Error message description
+          example: No object found for provided object ID
+          title: message
+          type: string
+        object_id:
+          description: Object ID queried
+          example: some-object-id
+          title: object_id
+          type: string
+        object_type:
+          description: Object type queried
+          example: SomeObjectType
+          title: object_type
+          type: string
+      title: NotFoundResponse
+      type: object
+    PolicyInfo_allOf:
+      properties:
+        crop:
+          description: Crop (also called value chain)
+          enum:
+          - Maize
+          - Sorghum
+          - Greengrams
+          - Potato
+          - SoyBeans
+          - Wheat
+          example: Maize
+          type: string
+        location:
+          description: Policy location
+          example: Pixel400568
+          pattern: ^Pixel[0-9]{6}$
+          type: string
+        sum_insured:
+          description: The sum insured for this policy
+          example: 1000.0
+          maximum: 1000000.0
+          minimum: 0.0
+          type: number
+        begin_date:
+          description: The insurance coverage start date for this policy
+          example: "20210331"
+          pattern: ^20[0-9]{6}$
+          type: string
+        end_date:
+          description: The insurance coverage end date for this policy
+          example: "20210821"
+          pattern: ^20[0-9]{6}$
+          type: string
+      type: object

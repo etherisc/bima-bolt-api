@@ -1,0 +1,9 @@
+[1] https://stackoverflow.com/questions/45680298/cleanest-way-to-glue-generated-flask-app-code-swagger-codegen-to-backend-imple
+
+clone openapi repo locally
+git clone https://github.com/OpenAPITools/openapi-generator.git
+
+copy python flask templates to local dir
+cp ../github/openapi-generator/modules/openapi-generator/src/main/resources/python-flask/* codegen/templates/
+
+modify templates according to stackoverflow post [1]
